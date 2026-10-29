@@ -89,9 +89,8 @@ const App = {
   },
 
   applyLoggedInUI() {
-    document.getElementById("appHeader").style.display = "block";
-    document.getElementById("headerUserName").textContent = this.currentUser.name;
-    document.getElementById("homeUserName").textContent = this.currentUser.name;
+    const headerUserEl = document.getElementById("headerUserName");
+    if (headerUserEl) headerUserEl.textContent = this.currentUser.name;
     document.querySelectorAll(".current-user-label").forEach((el) => {
       el.textContent = this.currentUser.name;
     });
@@ -163,18 +162,22 @@ const App = {
     });
 
     if (viewName === "home") {
-      document.getElementById("view-home").style.display = "block";
-      await this.renderHomeDashboard();
+      document.getElementById("appHeader").style.display = "none";
+      document.getElementById("view-home").style.display = "flex";
     } else if (viewName === "list") {
+      document.getElementById("appHeader").style.display = "block";
       document.getElementById("view-list").style.display = "block";
       await this.loadAndRenderPatternList();
     } else if (viewName === "detail" && patternId) {
+      document.getElementById("appHeader").style.display = "block";
       document.getElementById("view-detail").style.display = "block";
       await this.openPatternDetail(patternId);
     } else if (viewName === "register") {
+      document.getElementById("appHeader").style.display = "block";
       document.getElementById("view-register").style.display = "block";
       this.prepareRegisterView();
     } else if (viewName === "links") {
+      document.getElementById("appHeader").style.display = "block";
       document.getElementById("view-links").style.display = "block";
       await this.loadAndRenderLinks();
     }
