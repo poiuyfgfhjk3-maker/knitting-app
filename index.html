@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>코코아뜰리에 (Coco Atelier) - 뜨개인 전용 도안 체크 & 노트</title>
+  <!-- Pretendard Font -->
+  <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+  <!-- Custom Styles -->
+  <link rel="stylesheet" href="./css/style.css" />
+  <!-- PDF.js (for client-side PDF text extraction & page rendering) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <!-- Tesseract.js (for client-side JPG/PNG/Scanned PDF Korean+English OCR) -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <!-- Firebase SDK (Compat version for zero-build browser compatibility) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+</head>
+<body>
+  <!-- Top Header -->
+  <header class="app-header" id="appHeader" style="display: none;">
+    <div class="header-inner">
+      <div class="brand-logo" onclick="App.navigate('home')" title="홈 화면으로 이동">
+        <span class="logo-icon">🧶</span>
+        <div class="logo-text-wrap">
+          <span class="logo-title">코코아뜰리에</span>
+          <span class="logo-sub">나만의 뜨개질 도안 & 단수 체크북</span>
+        </div>
+      </div>
+
+      <nav class="top-nav">
+        <button class="nav-btn" data-nav="home" onclick="App.navigate('home')">🏠 홈</button>
+        <button class="nav-btn" data-nav="list" onclick="App.navigate('list')">📋 뜨개질 목록</button>
+        <button class="nav-btn" data-nav="register" onclick="App.navigate('register')">✍️ 뜨개질 등록</button>
+        <button class="nav-btn" data-nav="links" onclick="App.navigate('links')">📎 뜨개질 첨부파일</button>
+      </nav>
+
+      <div class="user-bar">
+        <button class="db-status-badge" id="dbStatusBadge" onclick="App.openFirebaseModal()" title="클릭하여 Firebase 연동 설정 보기">
+          <span class="status-dot" id="dbStatusDot"></span>
+          <span id="dbStatusText">로컬 저장소</span>
+        </button>
+        <div class="user-Chip">
+          <span class="user-icon">👤</span>
+          <strong id="headerUserName">뜨개인</strong>님
+        </div>
+        <button class="btn-logout" onclick="App.logout()">로그아웃</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="main-container">
+    <!-- 1. LOGIN VIEW (아이디: 이름, 비밀번호: 숫자) -->
+    <section id="view-login" class="view-section">
+      <div class="login-card">
+        <div class="login-hero">
+          <div class="yarn-badge">🧶</div>
+          <h1>뜨개인 전용 작업실</h1>
+          <p>도안을 한 줄씩 체크하고, 나만의 단수·코수 메모와 링크를 편하게 관리하세요.</p>
+        </div>
+
+        <form id="loginForm" class="login-form" onsubmit="App.handleLogin(event)">
+          <div class="form-group">
+            <label for="loginName">아이디 (이름)</label>
+            <input
+              type="text"
+              id="loginName"
+              placeholder="예: 김뜨개, 수세미장인"
+              required
+              autocomplete="username"
+            />
+            <small class="form-hint">본인의 이름이나 닉네임을 입력해 주세요.</small>
+          </div>
+
+          <div class="form-group">
+            <label for="loginPin">비밀번호 (숫자만)</label>
+            <input
+              type="password"
+              id="loginPin"
+              inputmode="numeric"
+              pattern="[0-9]+"
+              placeholder="숫자 비밀번호 입력 (예: 1234)"
+              required
+              autocomplete="current-password"
+              oninput="this.value = this.value.replace(/[^0-9]/g, '')"
+            />
+            <small class="form-hint">숫자로만 구성된 비밀번호를 입력해 주세요. (처음 오신 분은 입력한 정보로 바로 등록됩니다)</small>
+          </div>
+
+          <div id="loginErrorMsg" class="error-box" style="display: none;"></div>
+
+          <button type="submit" class="btn-primary btn-full btn-lg">
+            🧶 시작하기 (로그인 / 간편등록)
+          </button>
+        </form>
+
+        <div class="login-demo-accounts">
+          <div class="demo-title">💡 테스트용 빠른 시작 (타인 공용 도안 비교 체험)</div>
+          <div class="demo-btn-group">
+            <button type="button" class="btn-chip" onclick="App.quickLogin('김뜨개', '1234')">
+              👩 김뜨개 (비밀번호: 1234)
+            </button>
+            <button type="button" class="btn-chip" onclick="App.quickLogin('박코바늘', '0000')">
+              🧑 박코바늘 (비밀번호: 0000)
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. HOME VIEW (처음 화면: 뜨개질 목록, 뜨개질 등록, 뜨개질 첨부파일 3대 메뉴) -->
+    <section id="view-home" class="view-section" style="display: none;">
+      <div class="welcome-banner">
+        <div>
+          <span class="welcome-tag">오늘도 즐거운 뜨개 시간 되세요!</span>
+          <h2>안녕하세요, <span id="homeUserName">뜨개인</span>님 🧶</h2>
+          <p>원하시는 작업을 아래 세 가지 메뉴에서 선택해 주세요.</p>
+        </div>
+        <div class="welcome-stats" id="homeQuickStats">
+          <!-- Populated dynamically -->
+        </div>
+      </div>
+
+      <div class="home-menu-grid">
+        <!-- 카드 1: 뜨개질 목록 -->
+        <article class="menu-card" onclick="App.navigate('list')">
+          <div class="menu-card-icon bg-terracotta">📋</div>
+          <div class="menu-card-body">
+            <h3>뜨개질 목록</h3>
+            <p>내가 올린 도안과 다른 뜨개인이 공용으로 공유한 도안을 모아보고, 한 줄씩 체크하며 작업 진행도를 기록합니다.</p>
+            <ul class="menu-feature-list">
+              <li>✓ 내 도안 / 공용 도안 함께 보기</li>
+              <li>✓ 줄별 체크 표시 & 체크 초기화</li>
+              <li>✓ 나만 보는 단수·코수 개인 메모장</li>
+            </ul>
+          </div>
+          <div class="menu-card-footer">
+            <span>목록 보러가기</span>
+            <span class="arrow">→</span>
+          </div>
+        </article>
+
+        <!-- 카드 2: 뜨개질 등록 -->
+        <article class="menu-card" onclick="App.navigate('register')">
+          <div class="menu-card-icon bg-sage">✍️</div>
+          <div class="menu-card-body">
+            <h3>뜨개질 등록</h3>
+            <p>PDF, JPG, PNG 도안 파일을 여러 장 순서대로 올려 텍스트로 자동 변환하거나, 직접 텍스트를 복붙·작성하여 도안을 등록합니다.</p>
+            <ul class="menu-feature-list">
+              <li>✓ PDF · JPG · PNG 다중 파일 순서 지정 & 텍스트 추출</li>
+              <li>✓ 텍스트 복사/붙여넣기 수동 기록</li>
+              <li>✓ 미리보기 그림 자동 생성 & 저용량 최적화</li>
+            </ul>
+          </div>
+          <div class="menu-card-footer">
+            <span>새 도안 등록하기</span>
+            <span class="arrow">→</span>
+          </div>
+        </article>
+
+        <!-- 카드 3: 뜨개질 첨부파일 -->
+        <article class="menu-card" onclick="App.navigate('links')">
+          <div class="menu-card-icon bg-mustard">📎</div>
+          <div class="menu-card-body">
+            <h3>뜨개질 첨부파일</h3>
+            <p>참고할 유튜브 뜨개 영상, 블로그 무료 도안, 실·바늘 구매처 등 필요한 링크를 그대로 저장하고 목록으로 모아봅니다.</p>
+            <ul class="menu-feature-list">
+              <li>✓ 링크(URL) 붙여넣기 즉시 저장</li>
+              <li>✓ 사이트 자동 분류 및 한눈에 보는 링크 목록</li>
+              <li>✓ 나만 볼 수 있는 개인 전용 링크 보관함</li>
+            </ul>
+          </div>
+          <div class="menu-card-footer">
+            <span>첨부 링크 관리하기</span>
+            <span class="arrow">→</span>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <!-- 3. PATTERN LIST VIEW (뜨개질 목록: 내 목록 + 타인 공용 목록) -->
+    <section id="view-list" class="view-section" style="display: none;">
+      <div class="section-header">
+        <div>
+          <h2>📋 뜨개질 목록</h2>
+          <p>도안을 클릭하면 한 줄씩 체크하고 나만의 메모(몇 줄 몇 코)를 남길 수 있습니다.</p>
+        </div>
+        <button class="btn-primary" onclick="App.navigate('register')">+ 새 뜨개질 도안 등록</button>
+      </div>
+
+      <!-- Filter Tabs & Search -->
+      <div class="list-toolbar">
+        <div class="filter-tabs">
+          <button class="tab-btn active" data-filter="all" onclick="App.setListFilter('all')">
+            전체 도안 <span class="count-pill" id="countAll">0</span>
+          </button>
+          <button class="tab-btn" data-filter="mine" onclick="App.setListFilter('mine')">
+            내가 올린 뜨개질 <span class="count-pill" id="countMine">0</span>
+          </button>
+          <button class="tab-btn" data-filter="public" onclick="App.setListFilter('public')">
+            타인이 올린 공용 도안 <span class="count-pill" id="countPublic">0</span>
+          </button>
+        </div>
+
+        <div class="search-box">
+          <input
+            type="search"
+            id="patternSearchInput"
+            placeholder="도안 제목, 실 종류, 작성자 검색..."
+            oninput="App.renderPatternList()"
+          />
+        </div>
+      </div>
+
+      <!-- Pattern Cards Grid -->
+      <div id="patternListGrid" class="pattern-grid">
+        <!-- Populated by JS -->
+      </div>
+    </section>
+
+    <!-- 4. PATTERN DETAIL / KNITTING WORKSPACE VIEW (한 줄씩 체크 + 초기화 + 개인 메모) -->
+    <section id="view-detail" class="view-section" style="display: none;">
+      <div class="detail-top-bar">
+        <button class="btn-back" onclick="App.navigate('list')">← 목록으로 돌아가기</button>
+        <div class="detail-actions" id="detailOwnerActions">
+          <!-- Delete button if owner -->
+        </div>
+      </div>
+
+      <div class="detail-header-card">
+        <div class="detail-thumb-wrap">
+          <img id="detailThumbnail" src="" alt="도안 미리보기" />
+        </div>
+        <div class="detail-meta">
+          <div class="detail-badges">
+            <span id="detailScopeBadge" class="badge">공용 도안</span>
+            <span id="detailCategoryBadge" class="badge badge-outline">대바늘/코바늘</span>
+          </div>
+          <h2 id="detailTitle">도안 제목</h2>
+          <p class="detail-submeta">
+            <span>작성자: <strong id="detailAuthor">-</strong></span>
+            <span class="divider">·</span>
+            <span>실/바늘 정보: <strong id="detailYarnInfo">-</strong></span>
+            <span class="divider">·</span>
+            <span>등록일: <span id="detailDate">-</span></span>
+          </p>
+
+          <!-- Progress Bar (Personal to logged-in user) -->
+          <div class="progress-card">
+            <div class="progress-label-row">
+              <span><strong>내 뜨개 진행률</strong> (체크 기록은 본인에게만 보입니다)</span>
+              <strong id="detailProgressText">0 / 0줄 완료 (0%)</strong>
+            </div>
+            <div class="progress-bar-track">
+              <div id="detailProgressBar" class="progress-bar-fill" style="width: 0%;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Workspace 2-Column Layout: Left = Row-by-Row Checklist, Right = Personal Memo & Row/Stitch Counter -->
+      <div class="workspace-grid">
+        <!-- Left: Row by Row Checkable Pattern -->
+        <div class="workspace-panel checklist-panel">
+          <div class="panel-header">
+            <div>
+              <h3>✅ 한 줄 한 줄 도안 체크</h3>
+              <p class="panel-sub">줄을 클릭하면 완료 체크표시가 됩니다. 다음 뜰 차례는 주황색으로 표시돼요.</p>
+            </div>
+            <div class="checklist-controls">
+              <button class="btn-outline btn-sm" onclick="App.toggleFontSize()" title="글자 크기 조절">
+                🔍 글자 크기
+              </button>
+              <button class="btn-danger-outline btn-sm" onclick="App.resetPatternChecks()">
+                🔄 체크 초기화
+              </button>
+            </div>
+          </div>
+
+          <div id="patternLinesContainer" class="pattern-lines-list">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+
+        <!-- Right: Personal Memo & Stitch/Row Tracker (Private to Current User) -->
+        <aside class="workspace-panel memo-panel">
+          <div class="private-notice-banner">
+            🔒 <strong>개인 전용 공간:</strong> 공용 도안이라도 아래 체크 기록, 단·코수 카운터, 메모는 <strong>오직 <span class="current-user-label">본인</span>님만</strong> 볼 수 있습니다.
+          </div>
+
+          <!-- Quick Row & Stitch Counter -->
+          <div class="counter-widget">
+            <h4>🔢 빠른 단수 · 코수 기록기</h4>
+            <div class="counter-dual">
+              <div class="counter-box">
+                <span class="counter-title">현재 몇 줄(단)</span>
+                <div class="counter-ctrl">
+                  <button type="button" onclick="App.adjustCounter('row', -1)">−</button>
+                  <input type="number" id="memoRowInput" value="0" min="0" onchange="App.savePersonalMemo()" />
+                  <button type="button" onclick="App.adjustCounter('row', 1)">+</button>
+                </div>
+              </div>
+              <div class="counter-box">
+                <span class="counter-title">현재 몇 코</span>
+                <div class="counter-ctrl">
+                  <button type="button" onclick="App.adjustCounter('stitch', -1)">−</button>
+                  <input type="number" id="memoStitchInput" value="0" min="0" onchange="App.savePersonalMemo()" />
+                  <button type="button" onclick="App.adjustCounter('stitch', 1)">+</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Personal Free Memo -->
+          <div class="memo-widget">
+            <div class="memo-header-row">
+              <h4>📝 기타 개인 메모란</h4>
+              <span id="memoSaveStatus" class="save-status">자동 저장됨</span>
+            </div>
+            <p class="memo-helper">몇 줄 몇 코까지 떴는지, 바늘 호수 변경, 게이지, 주의할 점 등을 자유롭게 적어두세요.</p>
+            <textarea
+              id="personalMemoTextarea"
+              rows="8"
+              placeholder="예: 14단 32코까지 뜨고 잠깐 멈춤!&#10;소매 배색실은 아이보리색으로 바꿀 예정."
+              oninput="App.scheduleMemoSave()"
+            ></textarea>
+            <button type="button" class="btn-primary btn-full" onclick="App.savePersonalMemo(true)">
+              💾 메모 지금 저장하기
+            </button>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- 5. PATTERN REGISTER VIEW (뜨개질 등록: 파일 업로드 OCR 순서정렬 + 수동 복붙 + 썸네일 최적화) -->
+    <section id="view-register" class="view-section" style="display: none;">
+      <div class="section-header">
+        <div>
+          <h2>✍️ 뜨개질 등록</h2>
+          <p>PDF, JPG, PNG 파일을 순서대로 올려 텍스트로 변환하거나 직접 입력하여 도안을 등록하세요.</p>
+        </div>
+        <button class="btn-back" onclick="App.navigate('list')">목록 보기</button>
+      </div>
+
+      <form id="registerPatternForm" class="register-grid" onsubmit="App.handlePatternSubmit(event)">
+        <!-- Left Column: Basic Info + File Upload OCR + Manual Text Input -->
+        <div class="register-main-col">
+          <!-- Step 1: 도안 기본 정보 -->
+          <div class="card-block">
+            <h3 class="block-title">1. 도안 기본 정보</h3>
+            <div class="form-row-2">
+              <div class="form-group">
+                <label for="regTitle">도안 이름 <span class="req">*</span></label>
+                <input type="text" id="regTitle" placeholder="예: 포근한 꽈배기 조끼 도안" required />
+              </div>
+              <div class="form-group">
+                <label for="regCategory">종류 / 바늘 & 실 메모</label>
+                <input type="text" id="regCategory" placeholder="예: 대바늘 4.5mm · 울 코튼 3볼" />
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>공개 범위 설정 <span class="req">*</span></label>
+              <div class="radio-card-group">
+                <label class="radio-card">
+                  <input type="radio" name="regScope" value="public" checked />
+                  <div class="radio-card-content">
+                    <strong>🌐 공용으로 올리기 (추천)</strong>
+                    <span>내 목록과 다른 사람의 공용 뜨개질 목록에 함께 보입니다. (단, 체크표시와 메모는 각자 본인만 보임)</span>
+                  </div>
+                </label>
+                <label class="radio-card">
+                  <input type="radio" name="regScope" value="private" />
+                  <div class="radio-card-content">
+                    <strong>🔒 나만 보기 (개인 전용)</strong>
+                    <span>내가 올린 뜨개질 목록에서만 보입니다.</span>
+                  </div>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Step 2: 도안 파일 업로드 (PDF, JPG, PNG 다중 선택 및 순서 조정) -->
+          <div class="card-block">
+            <div class="block-header-between">
+              <div>
+                <h3 class="block-title">2. 파일로 도안 읽어오기 (PDF, JPG, PNG)</h3>
+                <p class="block-desc">여러 개의 파일을 올린 뒤 <strong>순서를 맞춰</strong> 텍스트로 일괄 변환할 수 있습니다.</p>
+              </div>
+              <span class="tag-badge">무료 자동 텍스트 추출</span>
+            </div>
+
+            <div class="file-dropzone" id="ocrDropzone" onclick="document.getElementById('ocrFileInput').click()">
+              <input
+                type="file"
+                id="ocrFileInput"
+                accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+                multiple
+                style="display: none;"
+                onchange="App.handleOcrFilesSelected(event)"
+              />
+              <div class="dropzone-icon">📄🖼️</div>
+              <p class="dropzone-title">클릭하거나 파일을 이곳에 끌어다 놓으세요 (여러 개 선택 가능)</p>
+              <p class="dropzone-sub">지원 형식: <strong>PDF, JPG, PNG</strong> · 여러 장을 올린 후 위/아래 버튼으로 순서를 조정하세요.</p>
+            </div>
+
+            <!-- Uploaded File Queue with Ordering Controls -->
+            <div id="ocrFileQueueWrap" class="file-queue-wrap" style="display: none;">
+              <div class="queue-header">
+                <strong>업로드된 파일 순서 (<span id="ocrQueueCount">0</span>개)</strong>
+                <span class="queue-hint">▲ / ▼ 버튼으로 도안 페이지 순서를 맞춘 뒤 아래 변환 버튼을 누르세요.</span>
+              </div>
+              <ul id="ocrFileQueueList" class="file-queue-list">
+                <!-- Populated by JS -->
+              </ul>
+              <div class="queue-actions">
+                <button type="button" class="btn-secondary" onclick="App.clearOcrQueue()">
+                  전체 파일 비우기
+                </button>
+                <button type="button" class="btn-accent" id="btnRunOcr" onclick="App.extractTextFromQueue()">
+                  ✨ 순서대로 텍스트 읽어오기 (도안 변환)
+                </button>
+              </div>
+            </div>
+
+            <!-- OCR Progress Status -->
+            <div id="ocrProgressBox" class="ocr-progress-box" style="display: none;">
+              <div class="ocr-spinner"></div>
+              <div class="ocr-progress-info">
+                <strong id="ocrStatusTitle">파일에서 텍스트를 읽어오는 중입니다...</strong>
+                <p id="ocrStatusDetail">잠시만 기다려 주세요.</p>
+                <div class="progress-bar-track sm">
+                  <div id="ocrProgressBar" class="progress-bar-fill" style="width: 10%;"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Step 3: 수동 기록 (텍스트 복붙 & 직접 작성 & 추출된 텍스트 다듬기) -->
+          <div class="card-block">
+            <div class="block-header-between">
+              <div>
+                <h3 class="block-title">3. 도안 내용 (직접 작성 / 텍스트 복붙 / 변환 결과 편집) <span class="req">*</span></h3>
+                <p class="block-desc">한 줄(엔터)마다 체크박스가 하나씩 생성됩니다. 파일에서 읽어온 텍스트를 다듬거나 직접 복사·붙여넣기 하세요.</p>
+              </div>
+              <div class="text-helper-btns">
+                <button type="button" class="btn-mini" onclick="App.formatPatternText('splitRows')" title="1단, 2단, R1 등을 기준으로 줄바꿈 정리">
+                  🪄 단/줄 단위 자동 줄바꿈
+                </button>
+                <button type="button" class="btn-mini" onclick="App.formatPatternText('cleanEmpty')" title="불필요한 빈 줄 정리">
+                  🧹 빈 줄 정리
+                </button>
+                <button type="button" class="btn-mini" onclick="App.insertSamplePatternText()" title="예시 도안 텍스트 넣기">
+                  🧶 예시 채우기
+                </button>
+              </div>
+            </div>
+
+            <textarea
+              id="regPatternText"
+              class="pattern-editor-textarea"
+              rows="12"
+              placeholder="여기에 도안 텍스트를 붙여넣거나 직접 작성해 주세요.&#10;(위에서 PDF, JPG, PNG 파일을 변환하면 이곳에 순서대로 자동 입력됩니다!)&#10;&#10;예시:&#10;1단: 사슬뜨기 20코 기둥코 1코&#10;2단: 짧은뜨기 20코 (총 20코)&#10;3단: [짧은뜨기 1코, 코늘리기] 10번 반복 (총 30코)"
+              oninput="App.updateLiveChecklistPreview()"
+              required
+            ></textarea>
+
+            <!-- Live Preview of Checkable Rows -->
+            <div class="live-preview-box">
+              <div class="live-preview-header">
+                <strong>👀 앱 변환 미리보기 (총 <span id="previewLineCount">0</span>줄 체크리스트)</strong>
+                <span>등록 후 뜨개질 목록에서 아래와 같이 한 줄씩 체크할 수 있습니다.</span>
+              </div>
+              <div id="liveChecklistPreview" class="live-checklist-items">
+                <!-- Populated live -->
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Column: Thumbnail Preview Optimization & Submit -->
+        <aside class="register-side-col">
+          <div class="card-block sticky-side">
+            <h3 class="block-title">4. 미리보기 그림 (자동/직접 등록 & 저용량 최적화)</h3>
+            <p class="block-desc">고화질 원본 대신 <strong>가볍게 최적화된 저용량 썸네일</strong>로 자동 변환하여 앱 속도를 빠르게 유지합니다.</p>
+
+            <div class="thumb-mode-tabs">
+              <button type="button" class="thumb-tab active" id="thumbTabAuto" onclick="App.setThumbMode('auto')">
+                🤖 자동 생성 (첫 파일/기본)
+              </button>
+              <button type="button" class="thumb-tab" id="thumbTabCustom" onclick="App.setThumbMode('custom')">
+                📷 직접 사진 등록
+              </button>
+            </div>
+
+            <!-- Custom Thumbnail Upload Input -->
+            <div id="customThumbUploadBox" style="display: none; margin-bottom: 12px;">
+              <input
+                type="file"
+                id="customThumbInput"
+                accept="image/jpeg,image/png,image/webp"
+                onchange="App.handleCustomThumbSelected(event)"
+              />
+            </div>
+
+            <!-- Thumbnail Preview Canvas/Img -->
+            <div class="thumb-preview-frame">
+              <img id="regThumbPreviewImg" src="" alt="미리보기 썸네일" />
+              <div class="thumb-opt-badge" id="thumbOptimizationInfo">
+                ⚡ 이미지 최적화 대기 중
+              </div>
+            </div>
+
+            <button type="button" class="btn-outline btn-sm btn-full" onclick="App.regenerateAutoThumbnail()" style="margin-bottom: 18px;">
+              🎨 미리보기 그림 다시 생성
+            </button>
+
+            <hr class="side-divider" />
+
+            <button type="submit" class="btn-primary btn-full btn-lg">
+              ✅ 뜨개질 도안 등록 완료
+            </button>
+          </div>
+        </aside>
+      </form>
+    </section>
+
+    <!-- 6. ATTACHMENTS / LINKS VIEW (뜨개질 첨부파일: 링크 그대로 저장 + 링크 목록) -->
+    <section id="view-links" class="view-section" style="display: none;">
+      <div class="section-header">
+        <div>
+          <h2>📎 뜨개질 첨부파일 (링크 보관함)</h2>
+          <p>유튜브 강의, 블로그 도안, 쇼핑몰 실 구매처 등 필요한 링크를 올리면 그대로 저장되고 목록으로 보여집니다.</p>
+        </div>
+      </div>
+
+      <!-- Add Link Card -->
+      <div class="card-block link-form-card">
+        <h3 class="block-title">🔗 새 링크 올리기</h3>
+        <form id="addLinkForm" class="link-form-grid" onsubmit="App.handleAddLink(event)">
+          <div class="form-group">
+            <label for="linkUrlInput">링크 주소 (URL) <span class="req">*</span></label>
+            <input
+              type="text"
+              id="linkUrlInput"
+              placeholder="https://... 링크를 그대로 복사해서 붙여넣으세요"
+              required
+            />
+          </div>
+          <div class="form-group">
+            <label for="linkTitleInput">링크 제목 / 메모 (선택)</label>
+            <input
+              type="text"
+              id="linkTitleInput"
+              placeholder="비워두면 링크 주소가 그대로 제목으로 저장됩니다"
+            />
+          </div>
+          <div class="form-group link-submit-col">
+            <button type="submit" class="btn-primary btn-lg">
+              + 링크 저장
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Saved Links List -->
+      <div class="card-block">
+        <div class="block-header-between">
+          <h3 class="block-title">📂 저장된 링크 목록 (<span id="savedLinkCount">0</span>개)</h3>
+          <span class="private-tag">🔒 <span class="current-user-label">본인</span>님의 링크 목록</span>
+        </div>
+
+        <div id="savedLinksList" class="links-list-container">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Firebase Connection Config Modal -->
+  <div id="firebaseModal" class="modal-backdrop" style="display: none;">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>🔥 Firebase 데이터베이스 연결 설정</h3>
+        <button class="modal-close" onclick="App.closeFirebaseModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-desc">
+          현재 앱은 <strong>Firebase 실시간 DB</strong>와 <strong>브라우저 로컬 저장소</strong>를 모두 지원합니다.<br />
+          Firebase 콘솔에서 발급받은 설정값(<code>firebaseConfig</code>)을 <code>js/firebase-config.js</code> 파일에 넣거나 아래에 붙여넣으면 모든 기기에서 공용 도안과 개인 체크 기록이 실시간 동기화됩니다.
+        </p>
+        <div class="form-group">
+          <label for="firebaseConfigTextarea">Firebase Config JSON (선택)</label>
+          <textarea
+            id="firebaseConfigTextarea"
+            rows="7"
+            placeholder='{
+  "apiKey": "AIzaSy...",
+  "authDomain": "your-app.firebaseapp.com",
+  "projectId": "your-app",
+  "storageBucket": "your-app.appspot.com",
+  "messagingSenderId": "123456789",
+  "appId": "1:123456789:web:abcdef"
+}'
+          ></textarea>
+        </div>
+        <div id="firebaseModalMsg" class="modal-msg"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-secondary" onclick="App.clearRuntimeFirebaseConfig()">로컬 모드로 전환</button>
+        <button type="button" class="btn-primary" onclick="App.saveRuntimeFirebaseConfig()">연결 저장 및 적용</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <!-- Application Scripts -->
+  <script src="./js/firebase-config.js"></script>
+  <script src="./js/storage.js"></script>
+  <script src="./js/ocr-helper.js"></script>
+  <script src="./js/app.js"></script>
+</body>
+</html>

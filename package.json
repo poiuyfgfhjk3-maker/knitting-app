@@ -1,0 +1,10 @@
+{
+  "name": "coco-knitting-app",
+  "version": "1.0.0",
+  "description": "뜨개인을 위한 도안 한 줄 체크 & 파일 자동 텍스트 변환 & 링크 보관 웹앱",
+  "private": true,
+  "scripts": {
+    "start": "npx serve .",
+    "build": "echo \"No build step required for static deployment\""
+  }
+}
